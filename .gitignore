@@ -1,0 +1,16 @@
+.env
+.DS_Store
+__pycache__/
+*.pyc
+*.log
+
+# Entornos virtuales
+MMPosev1.1/mmpose_env
+dataset/utils_env
+ViTPosev4.57/vitpose_env
+
+# Archivos grandes
+MMPosev1.1/configs/model_weights/hrnet_w32_coco_256x192-c78dce93_20200708.pth
+dataset/videos
+dataset/videos_resized
+ViTPosev4.57/configs/

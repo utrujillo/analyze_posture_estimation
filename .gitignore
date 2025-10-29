@@ -9,6 +9,7 @@ MMPosev1.1/mmpose_env
 dataset/utils_env
 ViTPosev4.57/vitpose_env
 YOLOv11/yolo_env
+MediaPipev0.10/mpipe_env
 
 # Archivos grandes
 MMPosev1.1/configs/model_weights/hrnet_w32_coco_256x192-c78dce93_20200708.pth

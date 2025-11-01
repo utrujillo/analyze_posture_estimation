@@ -104,7 +104,7 @@ class PCK:
                 true_keypoints, pred_keypoints, threshold
             )
             
-            print(f'PCK: {pck:.2f}%, True: {visible_true}/{total_true}, Pred: {visible_pred}/{total_pred}')
+            print(f'image: {image_path} PCK: {pck:.2f}%, True: {visible_true}/{total_true}, Pred: {visible_pred}/{total_pred}')
             
             results.append({
                 'nombre_imagen': image,
@@ -129,6 +129,15 @@ class PCK:
         self.__image_exists(image_path, label_path)
         true_keypoints = self.__get_true_keypoints(label_path)
         return self.__get_inference(image_path, true_keypoints, image, results, threshold)
+
+    def close(self):
+        """Método para cerrar explícitamente el modelo de MediaPipe"""
+        if self.pose is not None:
+            try:
+                self.pose.close()
+                self.pose = None
+            except Exception as e:
+                print(f"Error cerrando el modelo: {e}")
 
     def draw_predicted_keypoints(self, image_path, label_path):
         self.__image_exists(image_path, label_path)

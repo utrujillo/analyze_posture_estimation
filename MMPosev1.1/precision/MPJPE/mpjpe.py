@@ -99,7 +99,7 @@ class MPJPE:
     
         return mpjpe_pixels
 
-    def __get_inference(self, image_path, true_keypoints, image, results):
+    def __get_inference(self, image_path, true_keypoints, image, threshold, results):
         """
         Realiza la inferencia y calcula el PCK para una imagen.
         :param image_path: Ruta de la imagen
@@ -125,6 +125,7 @@ class MPJPE:
             results.append({
                 'nombre_imagen': image,
                 'image_size': f"{image_width}x{image_height}",
+                'threshold': threshold,
                 'cantidad_true_keypoints': len(true_keypoints),
                 'true_keypoints_visible': len(true_keypoints_visible),
                 'cantidad_pred_keypoints': len(pred_keypoints),
@@ -138,7 +139,7 @@ class MPJPE:
             print(f"No se encontraron keypoints en la imagen {image}.")
             return results
 
-    def evaluate_image(self, image, results):
+    def evaluate_image(self, image, threshold, results):
         """
         Evalúa una imagen y calcula el PCK.
         :param image: Nombre de la imagen
@@ -150,4 +151,4 @@ class MPJPE:
         self.__image_exists(image_path, label_path)
         true_keypoints = self.__get_true_keypoints(label_path)
 
-        return self.__get_inference(image_path, true_keypoints, image, results)
+        return self.__get_inference(image_path, true_keypoints, image, threshold, results)

@@ -9,12 +9,6 @@ class PCK:
     def __init__(self, basepath, images_path, labels_path, config_file, checkpoint_file):
         """
         Inicializa el evaluador PCK con MMPose.
-        
-        :param basepath: Ruta base del proyecto
-        :param images_path: Ruta de las imágenes
-        :param labels_path: Ruta de las etiquetas
-        :param config_file: Archivo de configuración del modelo MMPose
-        :param checkpoint_file: Checkpoint del modelo MMPose
         """
         self.basepath = basepath
         self.images_path = images_path
@@ -23,18 +17,39 @@ class PCK:
         # Inicializar el modelo MMPose
         self.model = init_model(config_file, checkpoint_file, device='cpu')
         
+        # Mapeo de keypoints entre tu formato (17) y MMPose (puede ser diferente)
+        # Este mapeo depende del modelo específico de MMPose que estés usando
+        self.keypoint_mapping = self._get_keypoint_mapping()
+        
+    def _get_keypoint_mapping(self):
+        """
+        Define el mapeo entre tus 17 keypoints y los keypoints del modelo MMPose.
+        Necesitas ajustar esto según el modelo específico que uses.
+        """
+        # Mapeo genérico - AJUSTA ESTO SEGÚN TU MODELO MMPose
+        # Esto asume que MMPose también usa 17 keypoints pero en orden diferente
+        # Si tu modelo de MMPose usa menos keypoints, necesitarás un mapeo diferente
+        return list(range(17))  # Mapeo directo por defecto
+    
     def __calculate_pck(self, true_keypoints, predicted_keypoints, threshold):
         """
         Calcula el PCK dados los puntos clave verdaderos y predichos.
-        
-        :param true_keypoints: Coordenadas verdaderas de los keypoints (N x 2)
-        :param predicted_keypoints: Coordenadas predichas de los keypoints (N x 2)
-        :param threshold: Umbral de distancia para considerar un punto clave correcto
-        :return: PCK y estadísticas
         """
-        visible_indices = np.where(true_keypoints[:, 2] == 2)[0]
-        true_keypoints_visible = true_keypoints[visible_indices, :2]
-        predicted_keypoints_visible = predicted_keypoints[visible_indices, :2]
+        # Solo considerar keypoints que existen en ambos conjuntos
+        min_keypoints = min(len(true_keypoints), len(predicted_keypoints))
+        
+        # Usar solo los keypoints comunes
+        true_keypoints_common = true_keypoints[:min_keypoints]
+        predicted_keypoints_common = predicted_keypoints[:min_keypoints]
+        
+        # Filtrar solo keypoints visibles
+        visible_indices = np.where(true_keypoints_common[:, 2] == 2)[0]
+        
+        if len(visible_indices) == 0:
+            return 0.0, len(true_keypoints), 0, len(predicted_keypoints), 0
+            
+        true_keypoints_visible = true_keypoints_common[visible_indices, :2]
+        predicted_keypoints_visible = predicted_keypoints_common[visible_indices, :2]
         
         distances = np.linalg.norm(true_keypoints_visible - predicted_keypoints_visible, axis=1)
         correct = np.sum(distances < threshold)
@@ -46,58 +61,76 @@ class PCK:
     def __image_exists(self, image_path, label_path):
         """
         Verifica si la imagen y el archivo de etiquetas existen.
-        
-        :param image_path: Ruta de la imagen
-        :param label_path: Ruta del archivo de etiquetas
         """
         if not os.path.exists(image_path):
             print(f"La imagen {image_path} no existe.")
+            return False
         if not os.path.exists(label_path):
             print(f"El archivo de etiquetas {label_path} no existe.")
+            return False
+        return True
 
     def __get_true_keypoints(self, label_path, image_width, image_height):
         """
         Obtiene las coordenadas verdaderas de los keypoints desde el archivo de etiquetas.
-        
-        :param label_path: Ruta del archivo de etiquetas
-        :param image_width: Ancho de la imagen
-        :param image_height: Alto de la imagen
-        :return: Coordenadas verdaderas de los keypoints
         """
-        with open(label_path, 'r') as file:
-            line = file.readline().strip()
-            parts = line.split()
+        try:
+            with open(label_path, 'r') as file:
+                line = file.readline().strip()
+                parts = line.split()
 
-        true_keypoints = []
-        for i in range(5, len(parts), 3):
-            x = float(parts[i]) * image_width
-            y = float(parts[i+1]) * image_height
-            vis = int(parts[i+2])
-            true_keypoints.append([x, y, vis])
-        return np.array(true_keypoints)
+            true_keypoints = []
+            for i in range(5, len(parts), 3):
+                x = float(parts[i]) * image_width
+                y = float(parts[i+1]) * image_height
+                vis = int(parts[i+2])
+                true_keypoints.append([x, y, vis])
+            return np.array(true_keypoints)
+        except Exception as e:
+            print(f"Error leyendo etiquetas {label_path}: {e}")
+            return np.array([])
+
+    def __align_keypoints(self, true_keypoints, pred_keypoints):
+        """
+        Alinea los keypoints verdaderos y predichos según el mapeo.
+        """
+        aligned_true = []
+        aligned_pred = []
+        
+        for i, mapped_idx in enumerate(self.keypoint_mapping):
+            if mapped_idx < len(true_keypoints) and i < len(pred_keypoints):
+                aligned_true.append(true_keypoints[mapped_idx])
+                aligned_pred.append(pred_keypoints[i])
+        
+        return np.array(aligned_true), np.array(aligned_pred)
 
     def __get_inference(self, image_path, true_keypoints, image, results, threshold):
         """
         Realiza la inferencia y calcula el PCK para una imagen.
-        
-        :param image_path: Ruta de la imagen
-        :param true_keypoints: Coordenadas verdaderas de los keypoints
-        :param image: Nombre de la imagen
-        :param results: Lista para almacenar los resultados
-        :param threshold: Umbral de distancia para considerar un punto clave correcto
         """
-        # Realizar inferencia con MMPose
-        pose_results = inference_topdown(self.model, image_path)
-        data_samples = merge_data_samples(pose_results)
-        
-        if data_samples.pred_instances:
+        try:
+            # Realizar inferencia con MMPose
+            pose_results = inference_topdown(self.model, image_path)
+            data_samples = merge_data_samples(pose_results)
+            
+            if not data_samples.pred_instances or len(data_samples.pred_instances.keypoints) == 0:
+                print(f"No se encontraron keypoints en la imagen {image}.")
+                return results
+            
             # Obtener keypoints predichos
             pred_keypoints = data_samples.pred_instances.keypoints[0]
             pred_scores = data_samples.pred_instances.keypoint_scores[0]
             
+            print(f"Keypoints predichos: {len(pred_keypoints)}, Keypoints verdaderos: {len(true_keypoints)}")
+            
             # Filtrar keypoints con baja confianza
             confidence_threshold = 0.3
             valid_indices = np.where(pred_scores > confidence_threshold)[0]
+            
+            if len(valid_indices) == 0:
+                print(f"No hay keypoints con confianza suficiente en {image}.")
+                return results
+                
             pred_keypoints = pred_keypoints[valid_indices]
             
             # Normalizar keypoints verdaderos y predichos a [0,1]
@@ -112,12 +145,18 @@ class PCK:
             pred_keypoints_normalized[:, 0] /= width
             pred_keypoints_normalized[:, 1] /= height
             
+            # Alinear keypoints según el mapeo
+            aligned_true, aligned_pred = self.__align_keypoints(true_keypoints_normalized, pred_keypoints_normalized)
+            
+            if len(aligned_true) == 0 or len(aligned_pred) == 0:
+                print(f"No se pudieron alinear keypoints para {image}.")
+                return results
+            
             # Calcular PCK
             pck, total_true, visible_true, total_pred, visible_pred = self.__calculate_pck(
-                true_keypoints_normalized, pred_keypoints_normalized, threshold)
+                aligned_true, aligned_pred, threshold)
             
-            print(f'PCK: {pck:.2f}%, Total true: {total_true}, Visible true: {visible_true}, '
-                  f'Total pred: {total_pred}, Visible pred: {visible_pred}')
+            print(f'Image: {image} PCK: {pck:.2f}%, True: {visible_true}/{total_true}, Pred: {visible_pred}/{total_pred}')
 
             results.append({
                 'nombre_imagen': image,
@@ -129,31 +168,41 @@ class PCK:
                 'pred_keypoints_visible': visible_pred,
                 'pck': pck
             })
-        else:
-            print(f"No se encontraron keypoints en la imagen {image}.")
+            
+        except Exception as e:
+            print(f"Error en inferencia para {image}: {e}")
         
         return results
 
     def evaluate_image(self, image, threshold, results):
         """
         Evalúa una imagen y calcula el PCK.
-        
-        :param image: Nombre de la imagen
-        :param threshold: Umbral de distancia para considerar un punto clave correcto
-        :param results: Lista de resultados
-        :return: Lista de resultados actualizada
         """
         image_path = os.path.join(self.images_path, image)
         label_path = os.path.join(self.labels_path, os.path.splitext(image)[0] + '.txt')
 
-        self.__image_exists(image_path, label_path)
+        if not self.__image_exists(image_path, label_path):
+            return results
         
-        # Obtener dimensiones de la imagen para normalización
-        img = cv2.imread(image_path)
-        height, width = img.shape[:2]
-        
-        true_keypoints = self.__get_true_keypoints(label_path, width, height)
-        return self.__get_inference(image_path, true_keypoints, image, results, threshold)
+        try:
+            # Obtener dimensiones de la imagen para normalización
+            img = cv2.imread(image_path)
+            if img is None:
+                print(f"No se pudo cargar la imagen {image_path}")
+                return results
+                
+            height, width = img.shape[:2]
+            
+            true_keypoints = self.__get_true_keypoints(label_path, width, height)
+            if len(true_keypoints) == 0:
+                print(f"No se pudieron obtener keypoints verdaderos para {image}")
+                return results
+                
+            return self.__get_inference(image_path, true_keypoints, image, results, threshold)
+            
+        except Exception as e:
+            print(f"Error evaluando {image}: {e}")
+            return results
 
     def draw_original_keypoints(self, image_path, label_path):
         """

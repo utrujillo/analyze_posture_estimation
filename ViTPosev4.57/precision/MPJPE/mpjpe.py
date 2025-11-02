@@ -110,7 +110,7 @@ class MPJPE:
     
         return mpjpe_pixels
 
-    def __get_inference(self, image_path, true_keypoints, image_name, results):
+    def __get_inference(self, image_path, true_keypoints, image_name, threshold, results):
         """
         Realiza la inferencia de ViTPose y calcula el MPJPE.
         """
@@ -175,6 +175,7 @@ class MPJPE:
 
         results.append({
             'nombre_imagen': image_name,
+            'threshold': threshold,
             'image_size': f"{image_width}x{image_height}",
             'cantidad_true_keypoints': len(true_keypoints),
             'true_keypoints_visible': visible_true_count,
@@ -186,7 +187,7 @@ class MPJPE:
 
         return results
         
-    def evaluate_image(self, image, results):
+    def evaluate_image(self, image, threshold, results):
         """
         Evalúa una imagen y calcula el MPJPE.
         """
@@ -199,4 +200,4 @@ class MPJPE:
         # Obtener keypoints verdaderos (normalizados)
         true_keypoints = self.__get_true_keypoints(label_path) 
 
-        return self.__get_inference(image_path, true_keypoints, image, results)
+        return self.__get_inference(image_path, true_keypoints, image, threshold, results)
